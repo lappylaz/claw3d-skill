@@ -589,14 +589,11 @@ If the MediaPath has no UUID (unusual), use `date +%s` for a unique ID. **NEVER*
 
 1. **Acknowledge** — "On it! Editing the 3D model. The Hunyuan step can take a few minutes when cold."
 2. **Run convert** — `claw3d convert --edit-3d <GLB_MediaPath> --prompt "..." --output edited_<ID>.glb`
-3. **Poll convert** — Edit-3D can take 5–10+ minutes. If you see `Command still running`:
-   - **Immediately** call `process poll <session>`.
-   - If still running → wait 10 seconds → call `process poll <session>` again. Repeat.
+   - Edit-3D can take 5–10+ minutes. If it backgrounds, call `process poll <session>` with `timeout: 120000`. You will be notified when it completes — do NOT poll in a rapid loop.
    - When you see `Wrote edited_<ID>.glb` → convert is done.
-   - **Do NOT stop polling and wait for the user.**
-4. **Run preview** — `claw3d preview --input edited_<ID>.glb --output preview_edited_<ID>.mp4`
-5. **Poll preview** — same pattern: poll until you see `Wrote`.
-6. **Send both files** — You MUST call the `message` tool. **NEVER output MEDIA: as text.**
+3. **Run preview** — `claw3d preview --input edited_<ID>.glb --output preview_edited_<ID>.mp4`
+   - Same: wait for result or single poll with `timeout: 120000`.
+4. **Send both files** — You MUST call the `message` tool. **NEVER output MEDIA: as text.**
    ```
    message(action="send", text="Here's the updated preview!", media="preview_edited_<ID>.mp4")
    message(action="send", text="And the edited model:", media="edited_<ID>.glb")
@@ -609,22 +606,18 @@ If the MediaPath has no UUID (unusual), use `date +%s` for a unique ID. **NEVER*
 1. **Acknowledge** — "Yes! Give me a minute—I'll let you know when the 3D model is ready."
 2. **Check build volume** — Run `claw3d printer list`; note `[WxDxH mm]` if present.
 3. **Run convert** — `claw3d convert --image <MediaPath> --output model_<ID>.glb`
-4. **Poll convert** — Convert takes 1–2 minutes. If you see `Command still running`:
-   - **Immediately** call `process poll <session>`.
-   - If still running → wait 10 seconds → call `process poll <session>` again. Repeat.
-   - When you see `Wrote model_<ID>.glb` → convert is done.
-   - **Do NOT stop polling and wait for the user to ask. Do NOT return control to the user.**
-5. **Run preview** — `claw3d preview --input model_<ID>.glb --output preview_<ID>.mp4 [--build-volume WxDxH]`
-6. **Poll preview** — If you see `Command still running`:
-   - **Immediately** call `process poll <session>`.
-   - If still running → wait 10 seconds → call `process poll <session>` again. Repeat.
-   - When you see `Wrote preview_<ID>.mp4` → preview is done.
-7. **Send files** — You MUST call the `message` tool to send files. **NEVER output MEDIA: as text — it will NOT deliver the file.**
+   - Convert takes 1–2 minutes. The exec call will wait for it to finish (up to 2 min).
+   - If it backgrounds (`Command still running`), call `process poll <session>` once with `timeout: 120000`. You will get notified when it completes — do NOT poll in a rapid loop.
+   - When you see `Wrote model_<ID>.glb` → convert is done. Proceed immediately.
+4. **Run preview** — `claw3d preview --input model_<ID>.glb --output preview_<ID>.mp4 [--build-volume WxDxH]`
+   - Same as above: wait for the result or poll once with `timeout: 120000`.
+   - When you see `Wrote preview_<ID>.mp4` → preview is done. Proceed immediately.
+5. **Send files** — You MUST call the `message` tool to send files. **NEVER output MEDIA: as text — it will NOT deliver the file.**
    ```
    message(action="send", text="Here's your 3D model preview!", media="preview_<ID>.mp4")
    message(action="send", text="And the 3D model file:", media="model_<ID>.glb")
    ```
-8. **ALWAYS ask about printing** — After sending the preview and model, ask:
+6. **ALWAYS ask about printing** — After sending the preview and model, ask:
    > Want me to slice this for 3D printing? If so, I need:
    >
    > 1. **Max print size** — What's the longest dimension? (e.g. 100mm, 150mm)
@@ -633,7 +626,7 @@ If the MediaPath has no UUID (unusual), use `date +%s` for a unique ID. **NEVER*
 
    This is **mandatory** for AI-generated models — they have no real-world dimensions, so you MUST get the max print size from the user before slicing. Do NOT slice without asking. Do NOT use a default size.
 
-**CRITICAL:** Run convert and preview via exec BEFORE sending. The files do not exist until you create them. You MUST poll both commands to completion — never stop early.
+**CRITICAL:** Run convert and preview via exec BEFORE sending. The files do not exist until you create them.
 
 ## Commands
 
@@ -1010,28 +1003,32 @@ claw3d model-status -i model_<ID>.glb
 claw3d doctor
 ```
 
-## Slice Command — Background Process Polling
+## Slice Command — Background Process Handling
 
-**CRITICAL: Both `claw3d slice` and `claw3d preview` run as background processes. You MUST poll autonomously until done. Do NOT stop polling and wait for the user.**
+**CRITICAL: Both `claw3d slice` and `claw3d preview` are long-running commands. You MUST wait for them to finish before proceeding. Do NOT return control to the user while they run.**
 
-### Exact polling sequence for `claw3d slice`:
+### How long-running commands work:
 
-1. Run `claw3d slice ...` — if you see `Command still running`, tell the user:
-   > Slicing started! I'll let you know when it's ready — usually 1–3 minutes.
-2. **Immediately** call `process poll <session>` (or `process log <session>`).
-3. If still running → wait 10 seconds → call `process poll <session>` again. Repeat.
-4. When you see `[timing] Slicing:` → tell user: "Slicing done! Generating preview video..."
-5. Keep polling. When you see `Wrote <path>` for the gcode preview → **stop polling, send both files immediately**.
+The exec call waits up to 2 minutes for the command to finish. Most commands complete within this window and return the result directly. If a command takes longer, exec returns `Command still running` with a session ID. In that case:
 
-### Exact polling sequence for `claw3d preview`:
+1. Call `process poll <session>` **once** with `timeout: 120000` (2 min wait).
+2. You will be notified automatically when the process completes.
+3. **Do NOT poll in a rapid loop** — this wastes API calls and hits rate limits.
+4. When you see `Wrote <path>` or `[timing]` → the command finished. Proceed immediately.
 
-1. Run `claw3d preview ...` — if you see `Command still running`, tell the user:
-   > Generating your 3D preview, I'll send it when it's ready!
-2. **Immediately** call `process poll <session>`.
-3. If still running → wait 10 seconds → call `process poll <session>` again. Repeat.
-4. When you see `Wrote <path>` → **stop polling, send the file immediately. Do NOT ask the user if they want it.**
+### For `claw3d slice`:
 
-**YOU MUST NOT stop the polling loop and return control to the user until you see `Wrote <path>` or an error. Stopping early and waiting for the user to ask is wrong.**
+1. Run `claw3d slice ...` — tell the user: "Slicing started! I'll let you know when it's ready."
+2. Wait for completion (exec returns result, or poll once if backgrounded).
+3. When you see `Wrote <path>` for the gcode preview → **send both files immediately**.
+
+### For `claw3d preview`:
+
+1. Run `claw3d preview ...` — tell the user: "Generating your 3D preview, I'll send it when it's ready!"
+2. Wait for completion (exec returns result, or poll once if backgrounded).
+3. When you see `Wrote <path>` → **send the file immediately. Do NOT ask the user if they want it.**
+
+**YOU MUST NOT return control to the user until you see `Wrote <path>` or an error.**
 
 **After slice succeeds, send BOTH the G-code and the G-code preview video.** Slice generates `model_<ID>_gcode_preview.mp4` by default (body red, supports yellow). Use the `message` tool so both files attach in Telegram.
 

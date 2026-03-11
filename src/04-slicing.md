@@ -105,28 +105,32 @@ claw3d model-status -i model_<ID>.glb
 claw3d doctor
 ```
 
-## Slice Command — Background Process Polling
+## Slice Command — Background Process Handling
 
-**CRITICAL: Both `claw3d slice` and `claw3d preview` run as background processes. You MUST poll autonomously until done. Do NOT stop polling and wait for the user.**
+**CRITICAL: Both `claw3d slice` and `claw3d preview` are long-running commands. You MUST wait for them to finish before proceeding. Do NOT return control to the user while they run.**
 
-### Exact polling sequence for `claw3d slice`:
+### How long-running commands work:
 
-1. Run `claw3d slice ...` — if you see `Command still running`, tell the user:
-   > Slicing started! I'll let you know when it's ready — usually 1–3 minutes.
-2. **Immediately** call `process poll <session>` (or `process log <session>`).
-3. If still running → wait 10 seconds → call `process poll <session>` again. Repeat.
-4. When you see `[timing] Slicing:` → tell user: "Slicing done! Generating preview video..."
-5. Keep polling. When you see `Wrote <path>` for the gcode preview → **stop polling, send both files immediately**.
+The exec call waits up to 2 minutes for the command to finish. Most commands complete within this window and return the result directly. If a command takes longer, exec returns `Command still running` with a session ID. In that case:
 
-### Exact polling sequence for `claw3d preview`:
+1. Call `process poll <session>` **once** with `timeout: 120000` (2 min wait).
+2. You will be notified automatically when the process completes.
+3. **Do NOT poll in a rapid loop** — this wastes API calls and hits rate limits.
+4. When you see `Wrote <path>` or `[timing]` → the command finished. Proceed immediately.
 
-1. Run `claw3d preview ...` — if you see `Command still running`, tell the user:
-   > Generating your 3D preview, I'll send it when it's ready!
-2. **Immediately** call `process poll <session>`.
-3. If still running → wait 10 seconds → call `process poll <session>` again. Repeat.
-4. When you see `Wrote <path>` → **stop polling, send the file immediately. Do NOT ask the user if they want it.**
+### For `claw3d slice`:
 
-**YOU MUST NOT stop the polling loop and return control to the user until you see `Wrote <path>` or an error. Stopping early and waiting for the user to ask is wrong.**
+1. Run `claw3d slice ...` — tell the user: "Slicing started! I'll let you know when it's ready."
+2. Wait for completion (exec returns result, or poll once if backgrounded).
+3. When you see `Wrote <path>` for the gcode preview → **send both files immediately**.
+
+### For `claw3d preview`:
+
+1. Run `claw3d preview ...` — tell the user: "Generating your 3D preview, I'll send it when it's ready!"
+2. Wait for completion (exec returns result, or poll once if backgrounded).
+3. When you see `Wrote <path>` → **send the file immediately. Do NOT ask the user if they want it.**
+
+**YOU MUST NOT return control to the user until you see `Wrote <path>` or an error.**
 
 **After slice succeeds, send BOTH the G-code and the G-code preview video.** Slice generates `model_<ID>_gcode_preview.mp4` by default (body red, supports yellow). Use the `message` tool so both files attach in Telegram.
 
