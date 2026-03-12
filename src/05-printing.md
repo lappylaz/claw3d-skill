@@ -32,7 +32,7 @@ claw3d printer set-default <id>   # only needed when 2+ printers; first printer 
 claw3d printer remove <id>
 ```
 
-**Parse user input:** "Creality K2 SE Living Room 192.168.28.102:4408" → name=`"Creality K2 SE Living Room"`, host=`192.168.28.102`, port=`4408`. If user also sends 3MF, add `--profile-from-3mf <path>`.
+**Parse user input:** "Creality K2 SE Living Room 192.168.1.100:4408" → name=`"Creality K2 SE Living Room"`, host=`192.168.1.100`, port=`4408`. If user also sends 3MF, add `--profile-from-3mf <path>`.
 
 **Default printer:** The first printer added is automatically set as the default. When there is only one printer, it is always used without asking. When 2+ printers exist and no default is set, ask the user which to use, then run `claw3d printer set-default <id>` with their choice so subsequent operations don't need to ask again.
 

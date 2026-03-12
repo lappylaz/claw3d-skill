@@ -898,7 +898,7 @@ claw3d slice ... --webhook "http://localhost:PORT/callback"
 [OK] FAL_API_KEY: configured
 [OK] GEMINI_API_KEY: configured
 [OK] THINGIVERSE_ACCESS_TOKEN: configured
-[OK] Printer: Creality K2 Pro (192.168.28.102:4408) — online, idle
+[OK] Printer: Creality K2 Pro (192.168.1.100:4408) — online, idle
 [OK] Profile: creality_k2_pro_profile (350×350×350mm)
 [WARN] ffmpeg: not found (video frame extraction will fail)
 ```
